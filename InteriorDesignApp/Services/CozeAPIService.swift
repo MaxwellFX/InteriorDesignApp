@@ -50,29 +50,15 @@ class CozeAPIService {
                         self.logDebug("✅ Design generated successfully!")
                         completion(.success(image))
                     case .failure(let error):
-                        // If API call fails, use the filter as fallback
+                        // Just pass the failure back to the caller
                         self.logDebug("❌ API Error: \(error.localizedDescription)")
-                        if let filteredImage = self.applyFilterToImage(image) {
-                            self.logDebug("⚠️ Using fallback filter method")
-                            completion(.success(filteredImage))
-                        } else {
-                            self.logDebug("❌ Fallback filter also failed")
-                            completion(.failure(error))
-                        }
+                        completion(.failure(error))
                     }
                 }
                 
             case .failure(let error):
                 self.logDebug("❌ Cloudinary upload failed: \(error.localizedDescription)")
-                
-                // If Cloudinary upload fails, use the filter as fallback
-                if let filteredImage = self.applyFilterToImage(image) {
-                    self.logDebug("⚠️ Using fallback filter method")
-                    completion(.success(filteredImage))
-                } else {
-                    self.logDebug("❌ Fallback filter also failed")
                 completion(.failure(error))
-                }
             }
         }
     }
@@ -341,9 +327,27 @@ class CozeAPIService {
                             if let outputURL = nestedJson["Output"] as? String {
                                 self.logDebug("✅ Found Output URL: \(outputURL)")
                                 
+                                // Check if the URL is empty or invalid
+                                if outputURL.isEmpty {
+                                    self.logDebug("❌ Output URL is empty")
+                                    DispatchQueue.main.async {
+                                        completion(.failure(CozeAPIError.api(code: -1, message: "API returned empty image URL")))
+                                    }
+                                    return
+                                }
+                                
+                                // Make sure we can create a valid URL
+                                guard let url = URL(string: outputURL) else {
+                                    self.logDebug("❌ Could not create URL from Output string: \(outputURL)")
+                                    DispatchQueue.main.async {
+                                        completion(.failure(CozeAPIError.invalidURL))
+                                    }
+                                    return
+                                }
+                                
                                 // Download the generated image
                                 self.logDebug("Downloading generated image...")
-                                self.downloadImage(from: URL(string: outputURL)!) { result in
+                                self.downloadImage(from: url) { result in
                                     DispatchQueue.main.async {
                                         completion(result)
                                     }
@@ -413,44 +417,6 @@ class CozeAPIService {
         }
         
         task.resume()
-    }
-    
-    // Fallback method that applies filters in case the API call fails
-    private func applyFilterToImage(_ image: UIImage) -> UIImage? {
-        logDebug("Applying fallback filter to image...")
-        guard let ciImage = CIImage(image: image) else {
-            logDebug("❌ Failed to create CIImage for filtering")
-            return nil
-        }
-        
-        // Apply a simple filter (sepia tone and increased saturation to simulate design changes)
-        let sepiaFilter = CIFilter(name: "CISepiaTone")
-        sepiaFilter?.setValue(ciImage, forKey: kCIInputImageKey)
-        sepiaFilter?.setValue(0.5, forKey: kCIInputIntensityKey)
-        
-        guard let sepiaOutput = sepiaFilter?.outputImage else {
-            logDebug("❌ Failed to apply sepia filter")
-            return nil
-        }
-        
-        let colorFilter = CIFilter(name: "CIColorControls")
-        colorFilter?.setValue(sepiaOutput, forKey: kCIInputImageKey)
-        colorFilter?.setValue(1.3, forKey: kCIInputSaturationKey) // Increase saturation
-        colorFilter?.setValue(0.1, forKey: kCIInputBrightnessKey) // Slightly brighter
-        
-        guard let outputImage = colorFilter?.outputImage else {
-            logDebug("❌ Failed to apply color filter")
-            return nil
-        }
-        
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(outputImage, from: outputImage.extent) else {
-            logDebug("❌ Failed to create CGImage from filtered image")
-            return nil
-        }
-        
-        logDebug("✅ Successfully applied fallback filters to image")
-        return UIImage(cgImage: cgImage)
     }
 }
 

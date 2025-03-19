@@ -254,12 +254,35 @@ struct CaptureView: View {
                         )
                         
                     case .failure(let error):
-                        // Update the design with the error
-                        let errorMessage = error.localizedDescription
-                        print("DEBUG: Error generating design: \(errorMessage)")
-                        StorageService.shared.updateDesignWithError(id: designId, errorMessage: errorMessage)
+                        // Get specific error message
+                        var errorMessage = error.localizedDescription
+                        var isRateLimitError = false
                         
-                        // Switch to the library tab to show the failed design
+                        // Check for rate limit errors
+                        if let apiError = error as? CozeAPIError, 
+                           case .rateLimited(let message) = apiError {
+                            errorMessage = "API Rate Limit Exceeded: Please try again later."
+                            isRateLimitError = true
+                            print("DEBUG: Rate limit error detected: \(message)")
+                        }
+                        
+                        print("DEBUG: Error generating design: \(errorMessage)")
+                        
+                        // Auto-delete the design after notifying user
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            print("DEBUG: Auto-deleting failed design with ID: \(designId)")
+                            StorageService.shared.deleteDesign(with: designId)
+                            
+                            // Show a toast message with the error before navigating
+                            let toastMessage = isRateLimitError ? 
+                                "Rate limit exceeded. Please try again later." : 
+                                "Design generation failed. Please try again."
+                                
+                            // Alert user about the failure
+                            self.showFailureAlert(message: toastMessage)
+                        }
+                        
+                        // Switch to the library tab
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                             self.navigateToLibrary()
                         }
@@ -304,6 +327,26 @@ struct CaptureView: View {
         
         // Switch to library tab
         switchToLibraryTab()
+    }
+    
+    // Helper method to show failure alert
+    private func showFailureAlert(message: String) {
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootViewController = windowScene.windows.first?.rootViewController {
+            
+            let alert = UIAlertController(
+                title: "Generation Failed", 
+                message: message,
+                preferredStyle: .alert
+            )
+            
+            alert.addAction(UIAlertAction(
+                title: "OK", 
+                style: .default
+            ))
+            
+            rootViewController.present(alert, animated: true)
+        }
     }
 }
 
