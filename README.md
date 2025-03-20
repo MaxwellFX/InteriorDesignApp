@@ -12,7 +12,7 @@ InteriorDesignApp is an iOS application that transforms your interior spaces wit
 
 ## Screenshot
 
-![App Screenshot](https://placeholder-for-app-screenshot.png)
+![App Screenshot](https://res.cloudinary.com/dswo78c0s/image/upload/v1742499554/result_pcvks8.jpg)
 
 ## Requirements
 
